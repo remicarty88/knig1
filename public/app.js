@@ -17,8 +17,35 @@ const esc = (s) =>
 const enc = encodeURIComponent;
 const dec = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
 
-async function api(url) {
-  const r = await fetch(url);
+/* ---------------------- авторизация через Telegram ---------------------- */
+
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+
+let session = { token: null, user: null };
+try { session = JSON.parse(localStorage.getItem('reader.session') || 'null') || session; } catch (e) {}
+
+async function tgLogin() {
+  if (!tg || !tg.initData) return false;
+  try {
+    const r = await fetch('/api/auth/telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData }),
+    });
+    if (!r.ok) return false;
+    const d = await r.json();
+    session = { token: d.token, user: d.user };
+    try { localStorage.setItem('reader.session', JSON.stringify(session)); } catch (e) {}
+    return true;
+  } catch (e) { return false; }
+}
+
+async function api(url, retried) {
+  const r = await fetch(url, {
+    headers: session.token ? { Authorization: 'Bearer ' + session.token } : {},
+  });
+  if (r.status === 401 && !retried && (await tgLogin())) return api(url, true);
   if (!r.ok) {
     let msg = 'Не удалось загрузить данные';
     try { msg = (await r.json()).error || msg; } catch {}
@@ -617,9 +644,9 @@ function viewProfile(id) {
   const hiddenN = Object.keys(getHidden().urls).length;
   content.innerHTML = `
     <div class="prof">
-      <div class="avatar">${icon('user')}</div>
-      <h1>Мой профиль</h1>
-      <p>Всё хранится на этом устройстве</p>
+      <div class="avatar">${session.user && session.user.photo ? `<img src="${esc(session.user.photo)}" alt="" referrerpolicy="no-referrer" />` : icon('user')}</div>
+      <h1>${session.user ? esc([session.user.firstName, session.user.lastName].filter(Boolean).join(' ') || 'Мой профиль') : 'Мой профиль'}</h1>
+      <p>${session.user && session.user.username ? '@' + esc(session.user.username) + ' · ' : ''}Прогресс хранится на этом устройстве</p>
     </div>
     <div class="stats">
       <div><b>${prog.length - done}</b><span>В процессе</span></div>
@@ -1361,5 +1388,20 @@ $('#searchForm').addEventListener('submit', (e) => {
 
 window.addEventListener('hashchange', route);
 
-loadGenres();
-route();
+(async function boot() {
+  // Внутри Telegram всегда входим заново; вне Telegram годится только живая сессия
+  let ok = await tgLogin();
+  if (!ok && session.token) {
+    try { await api('/api/me', true); ok = true; } catch (e) { ok = false; }
+  }
+  if (!ok) {
+    content.innerHTML = stateHtml(
+      'Войдите через Telegram',
+      'Это приложение работает только внутри Telegram. Откройте его через нашего бота.',
+      ''
+    );
+    return;
+  }
+  loadGenres();
+  route();
+})();
