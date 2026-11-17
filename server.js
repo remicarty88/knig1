@@ -14,7 +14,7 @@ app.use(express.json({ limit: '16kb' }));
 /* --------------------- авторизация через Telegram ------------------------ */
 
 // Токен вшит по просьбе владельца. Переменная окружения BOT_TOKEN имеет приоритет.
-const BOT_TOKEN = process.env.BOT_TOKEN || '9284828679:AAFalXIFoZhYogOSYxCqZ6N1hmI-yCYc43k';
+const BOT_TOKEN = process.env.BOT_TOKEN || ';
 const INITDATA_MAX_AGE = 24 * 60 * 60; // сек: initData старше суток не принимаем
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // сессия живёт 30 дней
 
