@@ -79,7 +79,7 @@ const THEMES = {
   violet: { name: 'Фиолет', bg: '#0b0912', ink: '#dedaee', sw: 'linear-gradient(135deg,#5b3df0,#c13bd8)', ck: '#ffffff' },
   green: { name: 'Зелёная', bg: '#0c1511', ink: '#d3e2d9', sw: 'linear-gradient(135deg,#2f6b4a,#7cc79c)', ck: '#ffffff' },
 };
-const DEFAULTS = { theme: 'violet', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal', bright: 100, safe: true };
+const DEFAULTS = { theme: 'violet', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal', bright: 100 };
 const S = { ...DEFAULTS, ...store.get('reader.settings.v3', {}) };
 if (!THEMES[S.theme]) S.theme = 'night';
 
@@ -177,19 +177,13 @@ function setNav(name) {
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === name));
 }
 
-/* ---------- фильтр «18+» ---------- */
-const ADULT_RE = /эроти[кч]|(^|[^а-яёa-z])секс|18\+|порн|интимн|бдсм|bdsm|для взрослых|erotic/i;
-const adultText = (b) => [b.title, b.genre, b.name, b.path].filter(Boolean).join(' ');
-const visibleCats = (list) => (S.safe ? (list || []).filter((c) => !ADULT_RE.test(`${c.name} ${c.path}`)) : list || []);
-const safeList = (list) => (S.safe ? (list || []).filter((b) => !ADULT_RE.test(adultText(b))) : list || []);
-
 let catalogP = null;
 const getCatalog = () =>
   catalogP || (catalogP = api('/api/catalog').catch((e) => { catalogP = null; throw e; }));
 
 async function loadGenres() {
   try {
-    const cats = visibleCats(await getCatalog());
+    const cats = await getCatalog();
     genresBox.innerHTML = cats
       .map((c) => `<a class="glink" data-path="${esc(c.path)}" href="#/cat/${enc(c.path)}/1">${esc(c.name)}</a>`)
       .join('');
@@ -215,7 +209,7 @@ function paged({ id, grid, wrap, seen, load, hasNext }) {
       if (id !== navId) return;
       n++;
       more = d.hasNext;
-      const fresh = safeList(d.results).filter((b) => !seen.has(b.url));
+      const fresh = d.results.filter((b) => !seen.has(b.url));
       fresh.forEach((b) => seen.add(b.url));
       grid.insertAdjacentHTML('beforeend', fresh.map(cardHtml).join(''));
       if (!more) wrap.remove();
@@ -317,7 +311,7 @@ async function fillTiles(id) {
   const box = $('#tiles');
   if (!box) return;
   try {
-    const cats = visibleCats(await getCatalog());
+    const cats = await getCatalog();
     if (id !== navId) return;
     box.innerHTML = cats
       .map((c, i) => `<a class="gcard" style="--h:${hashStr(c.name) % 360}" href="#/cat/${enc(c.path)}/1"><div><b>${esc(c.name)}</b>${Number(c.count) ? `<small>${Number(c.count).toLocaleString('ru-RU')} книг</small>` : ''}</div>${icon(CAT_ICONS[i % CAT_ICONS.length])}</a>`)
@@ -357,7 +351,7 @@ async function viewHome(id) {
   content.innerHTML = html;
 
   try {
-    const cats = visibleCats(await getCatalog());
+    const cats = await getCatalog();
     if (id !== navId) return;
     $('#chipsBox').innerHTML = `<div class="chips cats">${cats.slice(0, 7)
       .map((c, i) => `<a class="cat" href="#/cat/${enc(c.path)}/1">${icon(CAT_ICONS[i % CAT_ICONS.length])}<span>${esc(c.name)}</span></a>`)
@@ -367,7 +361,7 @@ async function viewHome(id) {
     const [da, db] = await Promise.all([load(cats[0]), load(cats[1])]);
     if (id !== navId) return;
 
-    const A = safeList(da && da.results);
+    const A = (da && da.results) || [];
     if (!A.length) {
       $('#heroBox').innerHTML = stateHtml('Подборка не загрузилась', 'Проверьте соединение и попробуйте ещё раз.', retryBtn);
       return;
@@ -388,7 +382,7 @@ async function viewHome(id) {
     let recs = A.filter((x) => !inHero.has(x.url)).slice(0, 10);
     if (recs.length < 4) recs = A.slice(0, 10);
 
-    const B = safeList(db && db.results);
+    const B = (db && db.results) || [];
     const pops = (B.length ? B : A.slice().reverse()).slice(0, 5);
     const popCat = B.length ? cats[1] : cats[0];
 
@@ -427,7 +421,6 @@ async function viewSearch(id, q) {
   try {
     const data = await api(`/api/search?q=${enc(q)}&page=1`);
     if (id !== navId) return;
-    data.results = safeList(data.results);
     if (!data.results.length) {
       content.innerHTML = stateHtml('Ничего не нашлось', `По запросу «${q}» книг нет. Проверьте написание или попробуйте фамилию автора.`);
       return;
@@ -458,12 +451,6 @@ async function viewCategory(id, path) {
   try {
     const data = await api(`/api/category?path=${enc(path)}&page=1`);
     if (id !== navId) return;
-    if (S.safe && ADULT_RE.test(`${data.title || ''} ${path}`)) {
-      content.innerHTML = stateHtml('Раздел скрыт', 'Вы скрыли книги 18+. Их можно показать в настройках оформления.', '<button class="btn alt" type="button" data-show-adult>Показать 18+</button>');
-      return;
-    }
-    data.subs = visibleCats(data.subs);
-    data.results = safeList(data.results);
     const title = data.title || 'Каталог';
     document.title = title;
 
@@ -1129,9 +1116,7 @@ function sheetBody() {
     <div class="sh-row"><div class="sh-label">Поля</div>
       <div class="seg">${seg('margin', [['narrow', 'Узкие'], ['normal', 'Обычные'], ['wide', 'Широкие']])}</div></div>
     <div class="sh-row"><div class="sh-label">Выравнивание</div>
-      <div class="seg">${seg('justify', [[false, 'По левому краю'], [true, 'По ширине']])}</div></div>
-    <div class="sh-row"><div class="sh-label">Эротика 18+</div>
-      <div class="seg">${seg('safe', [[true, 'Скрывать'], [false, 'Показывать']])}</div></div>`;
+      <div class="seg">${seg('justify', [[false, 'По левому краю'], [true, 'По ширине']])}</div></div>`;
 }
 
 function openSheet() {
@@ -1171,12 +1156,7 @@ function openSheet() {
   }
 }
 
-let refreshOnClose = false; // после смены фильтра 18+ обновляем экран, когда шторка закрыта
 function closeSheet(instant) {
-  if (refreshOnClose) {
-    refreshOnClose = false;
-    if (!document.body.classList.contains('reading')) setTimeout(route, 150);
-  }
   sheetRoot.classList.remove('open');
   if (instant) { sheetRoot.innerHTML = ''; return; }
   setTimeout(() => { if (!sheetRoot.classList.contains('open')) sheetRoot.innerHTML = ''; }, 300);
@@ -1190,10 +1170,9 @@ sheetRoot.addEventListener('click', (e) => {
     S.size = Math.min(28, Math.max(15, S.size + Number(step.dataset.step)));
   } else if (set) {
     const k = set.dataset.set, v = set.dataset.val;
-    S[k] = k === 'lh' ? Number(v) : (k === 'justify' || k === 'safe') ? v === 'true' : v;
+    S[k] = k === 'lh' ? Number(v) : k === 'justify' ? v === 'true' : v;
   } else return;
   applySettings();
-  if (set && set.dataset.set === 'safe') { refreshOnClose = true; loadGenres(); }
   $('#sheetBody').innerHTML = sheetBody();
 });
 sheetRoot.addEventListener('input', (e) => {
@@ -1223,12 +1202,6 @@ document.addEventListener('click', (e) => {
   }
   if (e.target.closest('[data-clear]') && confirm('Удалить прогресс чтения всех книг?')) {
     store.set('reader.progress', {});
-    route();
-  }
-  if (e.target.closest('[data-show-adult]')) {
-    S.safe = false;
-    applySettings();
-    loadGenres();
     route();
   }
   const fav = e.target.closest('[data-fav]');
