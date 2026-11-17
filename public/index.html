@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="night">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e1214" id="metaTheme" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Читалка" />
+  <title>Читалка</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400..700;1,7..72,400..600&family=Onest:wght@400;500;600;700&display=swap&subset=cyrillic" rel="stylesheet" />
+  <script>
+    // Тема применяется до отрисовки, чтобы не было вспышки
+    try {
+      var s = JSON.parse(localStorage.getItem('reader.settings.v2') || '{}');
+      if (s.theme) document.documentElement.dataset.theme = s.theme;
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Боковая панель (ПК) -->
+    <aside class="rail" id="rail">
+      <a class="brand" href="#/">
+        <span class="mark">Ч</span>
+        <span class="brand-name">Читалка</span>
+      </a>
+
+      <nav class="nav">
+        <a data-nav="home" href="#/"><i data-icon="home"></i>Главная</a>
+        <a data-nav="search" href="#/search/"><i data-icon="search"></i>Поиск</a>
+        <a data-nav="shelf" href="#/shelf"><i data-icon="books"></i>Моя полка</a>
+      </nav>
+
+      <div class="rail-title">Жанры</div>
+      <div class="genres" id="genres">
+        <div class="skel-line"></div>
+        <div class="skel-line"></div>
+        <div class="skel-line"></div>
+      </div>
+
+      <button class="rail-foot" type="button" data-open-settings>
+        <span class="aa">Aa</span> Оформление
+      </button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar" id="topbar">
+        <a class="mark sm" href="#/" aria-label="На главную">Ч</a>
+        <form class="search" id="searchForm" autocomplete="off" role="search">
+          <i data-icon="search"></i>
+          <input id="searchInput" type="search" enterkeyhint="search" placeholder="Книга или автор" aria-label="Поиск книг" />
+          <button type="submit" class="search-go">Найти</button>
+        </form>
+        <button class="ibtn aa" type="button" data-open-settings aria-label="Оформление">Aa</button>
+      </header>
+
+      <section class="content" id="content"></section>
+    </main>
+  </div>
+
+  <!-- Нижняя навигация (телефон) -->
+  <nav class="tabbar" id="tabbar" aria-label="Разделы">
+    <a data-nav="home" href="#/"><i data-icon="home"></i><span>Главная</span></a>
+    <a data-nav="search" href="#/search/"><i data-icon="search"></i><span>Поиск</span></a>
+    <a data-nav="shelf" href="#/shelf"><i data-icon="books"></i><span>Полка</span></a>
+  </nav>
+
+  <div id="sheetRoot"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
