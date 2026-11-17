@@ -844,3 +844,67 @@ body[data-view='book'] .content { padding-bottom: calc(40px + var(--safe-b)); }
 .sws.on i { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
 .sunI { width: 40px; display: grid; place-items: center; color: var(--muted); }
 .sunI .i { width: 22px; height: 22px; }
+
+
+/* ============================ Единая система оформления ============================ */
+:root { --r-card: 24px; --r-btn: 20px; }
+
+/* обложки: везде одинаковые скруглённые, без «корешка» */
+.cover { border-radius: 14px; box-shadow: 0 10px 20px -12px var(--shadow); }
+.cover::after { display: none; }
+.skel { border-radius: 14px; }
+.rcard .cover, .pop .cover, .lrow .cover { border-radius: 14px; box-shadow: none; }
+.rate { border-radius: 8px; }
+
+/* заголовки: один шрифт и один ритм */
+.head { margin: 14px 0 18px; }
+.head h1 { font: 700 clamp(30px, 8vw, 40px)/1.1 var(--ui); letter-spacing: -0.02em; }
+.sec { margin: 26px 0 12px; font: 700 24px var(--ui); letter-spacing: -0.015em; }
+.state h3, .sh-head h2 { font: 700 22px var(--ui); }
+.resume h3 { font: 700 20px/1.25 var(--ui); }
+.pagebar + .head { margin-top: 0; }
+
+/* кнопки и карточки: один набор радиусов */
+.btn { height: 56px; border-radius: var(--r-btn); }
+.state .btn { height: 48px; border-radius: 16px; }
+.resume, .rcard, .pop, .gcard, .menu, .stats div, .cat, .tile { border-radius: var(--r-card); }
+.search { border-radius: 20px; }
+.chip { border-radius: 999px; }
+
+/* строки библиотеки и удаление */
+.lrow { gap: 6px; }
+.lmain { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; }
+.del {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center;
+  border: 0; border-radius: 14px; background: none; color: var(--faint); cursor: pointer;
+}
+.del:active, .del:hover { background: var(--surface2); color: var(--text); }
+.del .i { width: 20px; height: 20px; }
+
+#snack {
+  position: fixed; left: 50%; bottom: calc(96px + var(--safe-b)); z-index: 60;
+  transform: translate(-50%, 12px);
+  display: flex; align-items: center; gap: 14px;
+  max-width: min(92vw, 420px); padding: 8px 8px 8px 18px;
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 18px;
+  box-shadow: 0 16px 32px -12px var(--shadow);
+  font-size: 14.5px; opacity: 0; pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+#snack.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#snack button { height: 38px; padding: 0 14px; border: 0; border-radius: 12px; background: none; color: var(--accent); font: 600 14.5px var(--ui); cursor: pointer; }
+@media (min-width: 900px) { #snack { bottom: 28px; } }
+
+
+/* ============================ Скрытие книг ============================ */
+.rcard { position: relative; }
+.xhide {
+  position: absolute; top: 14px; right: 14px; z-index: 3;
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(0, 0, 0, 0.55); color: #fff;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.xhide .i { width: 16px; height: 16px; stroke-width: 2.2; }
+.bhide { display: block; margin: 8px auto 0; padding: 12px; border: 0; background: none; color: var(--faint); font: 500 14px var(--ui); cursor: pointer; }

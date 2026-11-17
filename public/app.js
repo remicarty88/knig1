@@ -66,6 +66,7 @@ const P = {
   check: 'M5 12.5l4.5 4.5L19 7.5',
   sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20c0-3.5 3.6-6 8-6s8 2.5 8 6',
+  trash: 'M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13M10.5 11v6M13.5 11v6',
 };
 const icon = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${P[n]}"/></svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
@@ -79,7 +80,7 @@ const THEMES = {
   violet: { name: 'Фиолет', bg: '#0b0912', ink: '#dedaee', sw: 'linear-gradient(135deg,#5b3df0,#c13bd8)', ck: '#ffffff' },
   green: { name: 'Зелёная', bg: '#0c1511', ink: '#d3e2d9', sw: 'linear-gradient(135deg,#2f6b4a,#7cc79c)', ck: '#ffffff' },
 };
-const DEFAULTS = { theme: 'violet', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal', bright: 100 };
+const DEFAULTS = { theme: 'violet', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal', bright: 100, safe: true };
 const S = { ...DEFAULTS, ...store.get('reader.settings.v3', {}) };
 if (!THEMES[S.theme]) S.theme = 'night';
 
@@ -167,6 +168,43 @@ function stateHtml(title, text = '', action = '') {
 }
 const retryBtn = `<button class="btn alt" type="button" data-retry>Повторить</button>`;
 
+/* ============================== удаление с полок ============================== */
+
+let snackT = 0;
+function snack(text, undo) {
+  let el = $('#snack');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'snack';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span>${esc(text)}</span>${undo ? '<button type="button" data-undo>Отменить</button>' : ''}`;
+  requestAnimationFrame(() => el.classList.add('on'));
+  const u = el.querySelector('[data-undo]');
+  if (u) u.onclick = () => { clearTimeout(snackT); el.classList.remove('on'); undo(); };
+  clearTimeout(snackT);
+  snackT = setTimeout(() => el.classList.remove('on'), 5000);
+}
+
+function removeBook(kind, url, row) {
+  const key = kind === 'shelf' ? 'reader.shelf' : 'reader.progress';
+  const all = store.get(key, {});
+  const backup = all[url];
+  if (!backup) return;
+  delete all[url];
+  store.set(key, all);
+  if (row) row.remove();
+  const list = $('.llist');
+  if (list && !list.children.length) route();
+  snack(kind === 'shelf' ? 'Убрано из избранного' : 'Убрано из «Читаю»', () => {
+    const cur = store.get(key, {});
+    cur[url] = backup;
+    store.set(key, cur);
+    route();
+  });
+}
+
 /* ============================== роутинг ============================== */
 
 let navId = 0;
@@ -177,13 +215,49 @@ function setNav(name) {
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === name));
 }
 
+/* ---------- фильтр «18+» ---------- */
+const ADULT_RE = /эроти[кч]|порн|(^|[^а-яёa-z])секс|сексуал|18\s?\+|nc-?17|интимн|бдсм|bdsm|доминирован|фетиш|хентай|hentai|оргия|минет|нимфоман|проститут|шлюх|развратн|разврат|похотлив|гарем|для взрослых|откровенн|erotic|porn|xxx|слэш|яой/i;
+
+/* на главную берём книги только из «спокойных» жанров */
+const HOME_OK = /классик|фантаст|фэнтез|фентез|детектив|приключен|истори|научн|познават|психолог|саморазвит|бизнес|юмор|поэз|стих|детск|сказк|проза|биограф|мемуар|философ|боевик|триллер/i;
+const HOME_NO = /самиздат|фанфик|любов|романт|new ?adult|слэш|яой|женск|дамск|эроти|секс/i;
+const homeCats = (cats) => {
+  const ok = cats.filter((c) => HOME_OK.test(c.name) && !HOME_NO.test(c.name));
+  return ok.length >= 2 ? ok : cats.filter((c) => !HOME_NO.test(c.name));
+};
+
+/* книги и авторы, которые пользователь скрыл вручную */
+const getHidden = () => { const h = store.get('reader.hidden', {}); return { urls: h.urls || {}, authors: h.authors || {} }; };
+const authorKey = (s) => String(s || '').trim().toLowerCase();
+function hideBook(b) {
+  const h = getHidden();
+  h.urls[b.url] = 1;
+  if (b.author) h.authors[authorKey(b.author)] = 1;
+  store.set('reader.hidden', h);
+}
+function unhideBook(b) {
+  const h = getHidden();
+  delete h.urls[b.url];
+  if (b.author) delete h.authors[authorKey(b.author)];
+  store.set('reader.hidden', h);
+}
+const adultText = (b) => [b.title, b.genre, b.name, b.path].filter(Boolean).join(' ');
+const visibleCats = (list) => (S.safe ? (list || []).filter((c) => !ADULT_RE.test(`${c.name} ${c.path}`)) : list || []);
+const safeList = (list) => {
+  const hid = getHidden();
+  return (list || []).filter((b) =>
+    !hid.urls[b.url] &&
+    !(b.author && hid.authors[authorKey(b.author)]) &&
+    !(S.safe && ADULT_RE.test(adultText(b))));
+};
+
 let catalogP = null;
 const getCatalog = () =>
   catalogP || (catalogP = api('/api/catalog').catch((e) => { catalogP = null; throw e; }));
 
 async function loadGenres() {
   try {
-    const cats = await getCatalog();
+    const cats = visibleCats(await getCatalog());
     genresBox.innerHTML = cats
       .map((c) => `<a class="glink" data-path="${esc(c.path)}" href="#/cat/${enc(c.path)}/1">${esc(c.name)}</a>`)
       .join('');
@@ -209,7 +283,7 @@ function paged({ id, grid, wrap, seen, load, hasNext }) {
       if (id !== navId) return;
       n++;
       more = d.hasNext;
-      const fresh = d.results.filter((b) => !seen.has(b.url));
+      const fresh = safeList(d.results).filter((b) => !seen.has(b.url));
       fresh.forEach((b) => seen.add(b.url));
       grid.insertAdjacentHTML('beforeend', fresh.map(cardHtml).join(''));
       if (!more) wrap.remove();
@@ -293,6 +367,7 @@ function rcardHtml(b) {
         <div class="t">${esc(b.title)}</div>
         <div class="a">${esc(b.author)}</div>
       </a>
+      <button class="xhide" type="button" data-hide="${esc(b.url)}" aria-label="Не показывать эту книгу и автора">${icon('close')}</button>
       <div class="rcf">${ratingHtml(b)}<button class="fav ${on ? 'on' : ''}" type="button" data-fav="${esc(b.url)}" aria-pressed="${on}" aria-label="В избранное">${icon('heart')}</button></div>
     </div>`;
 }
@@ -311,7 +386,7 @@ async function fillTiles(id) {
   const box = $('#tiles');
   if (!box) return;
   try {
-    const cats = await getCatalog();
+    const cats = visibleCats(await getCatalog());
     if (id !== navId) return;
     box.innerHTML = cats
       .map((c, i) => `<a class="gcard" style="--h:${hashStr(c.name) % 360}" href="#/cat/${enc(c.path)}/1"><div><b>${esc(c.name)}</b>${Number(c.count) ? `<small>${Number(c.count).toLocaleString('ru-RU')} книг</small>` : ''}</div>${icon(CAT_ICONS[i % CAT_ICONS.length])}</a>`)
@@ -351,22 +426,23 @@ async function viewHome(id) {
   content.innerHTML = html;
 
   try {
-    const cats = await getCatalog();
+    const cats = visibleCats(await getCatalog());
     if (id !== navId) return;
     $('#chipsBox').innerHTML = `<div class="chips cats">${cats.slice(0, 7)
       .map((c, i) => `<a class="cat" href="#/cat/${enc(c.path)}/1">${icon(CAT_ICONS[i % CAT_ICONS.length])}<span>${esc(c.name)}</span></a>`)
       .join('')}<a class="cat" href="#/search/">${icon('compass')}<span>Все жанры</span></a></div>`;
 
+    const src = S.safe ? homeCats(cats) : cats;
     const load = (c) => (c ? api(`/api/category?path=${enc(c.path)}&page=1`).catch(() => null) : Promise.resolve(null));
-    const [da, db] = await Promise.all([load(cats[0]), load(cats[1])]);
+    const [da, db] = await Promise.all([load(src[0]), load(src[1])]);
     if (id !== navId) return;
 
-    const A = (da && da.results) || [];
+    const A = safeList(da && da.results);
     if (!A.length) {
       $('#heroBox').innerHTML = stateHtml('Подборка не загрузилась', 'Проверьте соединение и попробуйте ещё раз.', retryBtn);
       return;
     }
-    const tag = (da && da.title) || cats[0].name;
+    const tag = (da && da.title) || src[0].name;
     const withCover = A.filter((x) => x.cover);
     const heroList = (withCover.length >= 3 ? withCover : A).slice(0, 5).map((x) => ({ ...x, cat: tag }));
     $('#heroBox').innerHTML = heroHtml(heroList);
@@ -382,12 +458,12 @@ async function viewHome(id) {
     let recs = A.filter((x) => !inHero.has(x.url)).slice(0, 10);
     if (recs.length < 4) recs = A.slice(0, 10);
 
-    const B = (db && db.results) || [];
+    const B = safeList(db && db.results);
     const pops = (B.length ? B : A.slice().reverse()).slice(0, 5);
-    const popCat = B.length ? cats[1] : cats[0];
+    const popCat = B.length ? src[1] : src[0];
 
     $('#listsBox').innerHTML = `
-      <div class="sech"><h2>Рекомендуем</h2><a href="#/cat/${enc(cats[0].path)}/1">Все книги ${icon('arrow')}</a></div>
+      <div class="sech"><h2>Рекомендуем</h2><a href="#/cat/${enc(src[0].path)}/1">Все книги ${icon('arrow')}</a></div>
       <div class="rrow">${recs.map(rcardHtml).join('')}</div>
       <div class="sech"><h2>Популярное 🔥</h2><a href="#/cat/${enc(popCat.path)}/1">Все книги ${icon('arrow')}</a></div>
       <div class="pops">${pops.map(popHtml).join('')}</div>`;
@@ -421,6 +497,7 @@ async function viewSearch(id, q) {
   try {
     const data = await api(`/api/search?q=${enc(q)}&page=1`);
     if (id !== navId) return;
+    data.results = safeList(data.results);
     if (!data.results.length) {
       content.innerHTML = stateHtml('Ничего не нашлось', `По запросу «${q}» книг нет. Проверьте написание или попробуйте фамилию автора.`);
       return;
@@ -451,6 +528,12 @@ async function viewCategory(id, path) {
   try {
     const data = await api(`/api/category?path=${enc(path)}&page=1`);
     if (id !== navId) return;
+    if (S.safe && ADULT_RE.test(`${data.title || ''} ${path}`)) {
+      content.innerHTML = stateHtml('Раздел скрыт', 'Вы скрыли книги 18+. Их можно показать в настройках оформления.', '<button class="btn alt" type="button" data-show-adult>Показать 18+</button>');
+      return;
+    }
+    data.subs = visibleCats(data.subs);
+    data.results = safeList(data.results);
     const title = data.title || 'Каталог';
     document.title = title;
 
@@ -459,6 +542,7 @@ async function viewCategory(id, path) {
       : '';
 
     content.innerHTML = `
+      <div class="pagebar"><button class="ibtn rnd" type="button" data-back aria-label="Назад">${icon('back')}</button></div>
       <div class="head"><h1>${esc(title)}</h1>${data.subs.length ? '<p>Поджанры и книги</p>' : ''}</div>
       ${chips}
       ${data.results.length
@@ -483,6 +567,9 @@ async function viewCategory(id, path) {
 const libTabs = (on) =>
   `<div class="segtabs"><a class="${on === 'shelf' ? 'on' : ''}" href="#/shelf">Читаю</a><a class="${on === 'fav' ? 'on' : ''}" href="#/fav">Избранное</a></div>`;
 
+const delBtn = (kind, url, label) =>
+  `<button class="del" type="button" data-del="${kind}" data-url="${esc(url)}" aria-label="${label}">${icon('trash')}</button>`;
+
 function viewShelf(id) {
   setNav('shelf');
   markGenre(null);
@@ -490,11 +577,14 @@ function viewShelf(id) {
   const rows = reading.map((p) => {
     const pc = pctOf(p);
     return `
-      <a class="lrow" href="#/read/${enc(p.url)}/${p.page || 1}">
-        <div class="cover">${coverInner(p)}</div>
-        <div class="lm"><div class="t">${esc(p.title)}</div><div class="a">${esc(p.author)}</div><div class="bar"><i style="width:${pc}%"></i></div></div>
-        <span class="lpct">${pc}%</span>
-      </a>`;
+      <div class="lrow">
+        <a class="lmain" href="#/read/${enc(p.url)}/${p.page || 1}">
+          <div class="cover">${coverInner(p)}</div>
+          <div class="lm"><div class="t">${esc(p.title)}</div><div class="a">${esc(p.author)}</div><div class="bar"><i style="width:${pc}%"></i></div></div>
+          <span class="lpct">${pc}%</span>
+        </a>
+        ${delBtn('progress', p.url, 'Убрать из «Читаю»')}
+      </div>`;
   }).join('');
   content.innerHTML = `<div class="head"><h1>Моя библиотека</h1></div>${libTabs('shelf')}` + (reading.length
     ? `<div class="llist">${rows}</div>`
@@ -506,11 +596,13 @@ function viewFav(id) {
   markGenre(null);
   const shelf = Object.values(getShelf()).sort((a, b) => b.added - a.added);
   const rows = shelf.map((b) => `
-    <a class="lrow" href="#/book/${enc(b.url)}">
-      <div class="cover">${coverInner(b)}</div>
-      <div class="lm"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div></div>
-      <span class="rbtn">Читать</span>
-    </a>`).join('');
+    <div class="lrow">
+      <a class="lmain" href="#/book/${enc(b.url)}">
+        <div class="cover">${coverInner(b)}</div>
+        <div class="lm"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div></div>
+      </a>
+      ${delBtn('shelf', b.url, 'Убрать из избранного')}
+    </div>`).join('');
   content.innerHTML = `<div class="head"><h1>Моя библиотека</h1></div>${libTabs('fav')}` + (shelf.length
     ? `<div class="llist">${rows}</div>`
     : stateHtml('Здесь пусто', 'Нажмите на закладку или сердечко у книги — она сохранится здесь.', '<a class="btn" href="#/">Выбрать книгу</a>'));
@@ -522,6 +614,7 @@ function viewProfile(id) {
   const prog = Object.values(getProgress());
   const done = prog.filter((p) => pctOf(p) >= 97).length;
   const favs = Object.keys(getShelf()).length;
+  const hiddenN = Object.keys(getHidden().urls).length;
   content.innerHTML = `
     <div class="prof">
       <div class="avatar">${icon('user')}</div>
@@ -537,6 +630,7 @@ function viewProfile(id) {
       <a href="#/shelf">${icon('books')}<span>Моя библиотека</span>${icon('chev')}</a>
       <a href="#/fav">${icon('heart')}<span>Избранное</span>${icon('chev')}</a>
       <button type="button" data-open-settings>${icon('gear')}<span>Оформление и чтение</span>${icon('chev')}</button>
+      ${hiddenN ? `<button type="button" data-unhide>${icon('close')}<span>Показать скрытые книги (${hiddenN})</span></button>` : ''}
       <button type="button" data-clear>${icon('close')}<span>Очистить историю чтения</span></button>
     </div>`;
 }
@@ -583,12 +677,18 @@ async function viewBook(id, url) {
           <button class="fbtn ${onShelf ? 'on' : ''}" type="button" id="shelfBtn" aria-pressed="${onShelf}" aria-label="В избранное">${icon('mark')}</button>
         </div>
         ${started ? `<a class="brestart" href="#/read/${enc(url)}/1" data-restart>Начать сначала</a>` : ''}
+        <button class="bhide" type="button" id="hideBtn">Не показывать эту книгу и автора</button>
       </div>`;
 
     $('#shelfBtn').onclick = () => {
       onShelf = toggleShelf(b);
       $('#shelfBtn').classList.toggle('on', onShelf);
       $('#shelfBtn').setAttribute('aria-pressed', String(onShelf));
+    };
+    $('#hideBtn').onclick = () => {
+      hideBook(b);
+      snack('Книга и автор скрыты', () => unhideBook(b));
+      if (history.length > 1) history.back(); else location.hash = '#/';
     };
     const restart = $('[data-restart]');
     if (restart) restart.addEventListener('click', () => saveProgress(url, { page: 1, scroll: 0, block: 0 }));
@@ -1116,7 +1216,9 @@ function sheetBody() {
     <div class="sh-row"><div class="sh-label">Поля</div>
       <div class="seg">${seg('margin', [['narrow', 'Узкие'], ['normal', 'Обычные'], ['wide', 'Широкие']])}</div></div>
     <div class="sh-row"><div class="sh-label">Выравнивание</div>
-      <div class="seg">${seg('justify', [[false, 'По левому краю'], [true, 'По ширине']])}</div></div>`;
+      <div class="seg">${seg('justify', [[false, 'По левому краю'], [true, 'По ширине']])}</div></div>
+    <div class="sh-row"><div class="sh-label">Эротика 18+</div>
+      <div class="seg">${seg('safe', [[true, 'Скрывать'], [false, 'Показывать']])}</div></div>`;
 }
 
 function openSheet() {
@@ -1156,7 +1258,12 @@ function openSheet() {
   }
 }
 
+let refreshOnClose = false; // после смены фильтра 18+ обновляем экран, когда шторка закрыта
 function closeSheet(instant) {
+  if (refreshOnClose) {
+    refreshOnClose = false;
+    if (!document.body.classList.contains('reading')) setTimeout(route, 150);
+  }
   sheetRoot.classList.remove('open');
   if (instant) { sheetRoot.innerHTML = ''; return; }
   setTimeout(() => { if (!sheetRoot.classList.contains('open')) sheetRoot.innerHTML = ''; }, 300);
@@ -1170,9 +1277,10 @@ sheetRoot.addEventListener('click', (e) => {
     S.size = Math.min(28, Math.max(15, S.size + Number(step.dataset.step)));
   } else if (set) {
     const k = set.dataset.set, v = set.dataset.val;
-    S[k] = k === 'lh' ? Number(v) : k === 'justify' ? v === 'true' : v;
+    S[k] = k === 'lh' ? Number(v) : (k === 'justify' || k === 'safe') ? v === 'true' : v;
   } else return;
   applySettings();
+  if (set && set.dataset.set === 'safe') { refreshOnClose = true; loadGenres(); }
   $('#sheetBody').innerHTML = sheetBody();
 });
 sheetRoot.addEventListener('input', (e) => {
@@ -1202,6 +1310,32 @@ document.addEventListener('click', (e) => {
   }
   if (e.target.closest('[data-clear]') && confirm('Удалить прогресс чтения всех книг?')) {
     store.set('reader.progress', {});
+    route();
+  }
+  const hid = e.target.closest('[data-hide]');
+  if (hid) {
+    e.preventDefault();
+    const b = known.get(hid.dataset.hide);
+    if (b) {
+      hideBook(b);
+      const card = hid.closest('.rcard');
+      if (card) card.remove();
+      snack('Книга и автор скрыты', () => { unhideBook(b); route(); });
+    }
+  }
+  if (e.target.closest('[data-unhide]') && confirm('Показывать все скрытые книги и авторов снова?')) {
+    store.set('reader.hidden', { urls: {}, authors: {} });
+    route();
+  }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    e.preventDefault();
+    removeBook(del.dataset.del, del.dataset.url, del.closest('.lrow'));
+  }
+  if (e.target.closest('[data-show-adult]')) {
+    S.safe = false;
+    applySettings();
+    loadGenres();
     route();
   }
   const fav = e.target.closest('[data-fav]');
