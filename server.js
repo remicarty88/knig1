@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const libcat = require('./libcat');
 
@@ -8,6 +9,95 @@ const app = express();
 const PORT = process.env.PORT || 8099;
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json({ limit: '16kb' }));
+
+/* --------------------- авторизация через Telegram ------------------------ */
+
+// Токен вшит по просьбе владельца. Переменная окружения BOT_TOKEN имеет приоритет.
+const BOT_TOKEN = process.env.BOT_TOKEN || '9284828679:AAFalXIFoZhYogOSYxCqZ6N1hmI-yCYc43k';
+const INITDATA_MAX_AGE = 24 * 60 * 60; // сек: initData старше суток не принимаем
+const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // сессия живёт 30 дней
+
+const hmac = (key, data) => crypto.createHmac('sha256', key).update(data);
+const SESSION_KEY = hmac('booklife-session', BOT_TOKEN).digest();
+
+// Проверка подписи initData по документации Telegram Mini Apps
+function verifyInitData(initData) {
+  if (typeof initData !== 'string' || !initData) return null;
+  const params = new URLSearchParams(initData);
+  const hash = params.get('hash');
+  if (!hash) return null;
+  params.delete('hash');
+
+  const checkString = [...params.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n');
+
+  const secret = hmac('WebAppData', BOT_TOKEN).digest();
+  const calc = hmac(secret, checkString).digest();
+  const given = Buffer.from(hash, 'hex');
+  if (given.length !== calc.length || !crypto.timingSafeEqual(given, calc)) return null;
+
+  const authDate = Number(params.get('auth_date'));
+  if (!authDate || Date.now() / 1000 - authDate > INITDATA_MAX_AGE) return null;
+
+  try { return JSON.parse(params.get('user')); } catch (e) { return null; }
+}
+
+function signSession(user) {
+  const body = Buffer.from(
+    JSON.stringify({
+      id: user.id,
+      fn: user.first_name || '',
+      ln: user.last_name || '',
+      un: user.username || '',
+      ph: user.photo_url || '',
+      exp: Date.now() + SESSION_TTL,
+    })
+  ).toString('base64url');
+  return body + '.' + hmac(SESSION_KEY, body).digest('base64url');
+}
+
+function readSession(token) {
+  if (typeof token !== 'string') return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const good = hmac(SESSION_KEY, body).digest();
+  const got = Buffer.from(sig, 'base64url');
+  if (got.length !== good.length || !crypto.timingSafeEqual(got, good)) return null;
+  try {
+    const d = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    return d.exp > Date.now() ? d : null;
+  } catch (e) { return null; }
+}
+
+const publicUser = (d) => ({
+  id: d.id,
+  firstName: d.fn,
+  lastName: d.ln,
+  username: d.un,
+  photo: d.ph,
+});
+
+app.post('/api/auth/telegram', (req, res) => {
+  const user = verifyInitData(req.body && req.body.initData);
+  if (!user || !user.id) return res.status(401).json({ error: 'Не удалось подтвердить вход через Telegram' });
+  const token = signSession(user);
+  res.json({ token, user: publicUser(readSession(token)) });
+});
+
+// Все остальные /api/* (кроме картинок) требуют сессию
+app.use('/api', (req, res, next) => {
+  if (req.path === '/img') return next();
+  const m = /^Bearer (.+)$/.exec(req.get('Authorization') || '');
+  const sess = m && readSession(m[1]);
+  if (!sess) return res.status(401).json({ error: 'Требуется вход через Telegram' });
+  req.user = sess;
+  next();
+});
+
+app.get('/api/me', (req, res) => res.json({ user: publicUser(req.user) }));
 
 /* ------------------------- простой кэш ответов --------------------------- */
 
