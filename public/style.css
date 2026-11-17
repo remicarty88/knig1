@@ -737,3 +737,110 @@ html[data-theme='violet'] body::before {
   .rrow { margin: 0; padding: 4px 0 14px; }
   .pops { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
 }
+
+
+/* ============================ Тема «Зелёная» ============================ */
+html[data-theme='green'] {
+  --bg: #0c1511; --glass: rgba(12, 21, 17, 0.86);
+  --surface: #121e18; --surface2: #1a2a22; --line: #243a2e;
+  --text: #e4efe8; --muted: #93aa9c; --faint: #5f7568;
+  --accent: #5fc08a; --accent-ink: #04180d; --ink: #d3e2d9;
+  --shadow: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+
+/* ============================ Каталог ============================ */
+.gcards { display: flex; flex-direction: column; gap: 12px; }
+.gcard {
+  position: relative; overflow: hidden; min-height: 84px; padding: 16px 20px;
+  display: flex; align-items: center;
+  border: 1px solid var(--line); border-radius: 20px; transition: transform 0.12s;
+  background: linear-gradient(100deg, var(--surface) 34%, color-mix(in srgb, hsl(var(--h, 260) 70% 52%) 42%, var(--surface)));
+}
+.gcard:active { transform: scale(0.985); }
+.gcard b { display: block; font: 600 18px/1.25 var(--ui); }
+.gcard small { display: block; margin-top: 4px; color: var(--muted); font-size: 13.5px; }
+.gcard .i { position: absolute; right: 22px; width: 56px; height: 56px; stroke-width: 1.2; opacity: 0.6; color: hsl(var(--h, 260) 85% 78%); }
+@media (min-width: 900px) { .gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); } }
+
+/* ============================ Страница книги ============================ */
+.bpage { max-width: 760px; }
+.pagebar { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 14px; }
+.rnd { width: 46px; height: 46px; flex: none; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); }
+.rnd.on { color: var(--accent); }
+.rnd.on .i { fill: currentColor; }
+.btop { display: flex; align-items: center; gap: 18px; }
+.btop .cover { width: 42%; max-width: 190px; flex: none; }
+.bmeta { min-width: 0; }
+.bmeta h1 { margin: 0 0 8px; font: 700 clamp(26px, 7.5vw, 36px)/1.1 var(--ui); letter-spacing: -0.02em; text-wrap: balance; }
+.bmeta .by { color: var(--muted); font-size: 15px; }
+.bmeta .rt { margin-top: 14px; font-size: 16px; color: var(--text); }
+.bmeta .facts { margin-top: 8px; color: var(--muted); font-size: 14px; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.tag { padding: 7px 14px; border-radius: 999px; font-size: 13.5px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.bdesc { margin: 0; color: var(--ink); font-size: 16px; line-height: 1.6; }
+.bpage .bar { margin-top: 22px; }
+.bacts { display: flex; align-items: center; gap: 10px; margin-top: 22px; }
+.bacts .btn { flex: 1; height: 56px; border-radius: 20px; }
+.fbtn { width: 56px; height: 56px; flex: none; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--text); cursor: pointer; }
+.fbtn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.fbtn.on .i { fill: currentColor; }
+.brestart { display: block; margin-top: 16px; text-align: center; color: var(--muted); font-size: 14px; }
+body[data-view='book'] .content { padding-bottom: calc(40px + var(--safe-b)); }
+@media (max-width: 899px) { body[data-view='book'] .topbar { display: none; } }
+
+/* ============================ Библиотека и профиль ============================ */
+.segtabs { display: flex; gap: 8px; margin: 0 0 18px; }
+.segtabs a { padding: 10px 20px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
+.segtabs a.on { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.llist { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.lrow { display: flex; align-items: center; gap: 14px; }
+.lrow .cover { width: 64px; flex: none; border-radius: 10px; }
+.lrow .cover::after { display: none; }
+.lm { flex: 1; min-width: 0; }
+.lm .t { font: 600 17px/1.25 var(--ui); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lm .a { margin-top: 2px; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm .bar { margin-top: 10px; }
+.lpct { flex: none; min-width: 42px; text-align: right; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+
+.prof { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 14px 0 6px; }
+.avatar { width: 96px; height: 96px; display: grid; place-items: center; border-radius: 50%; color: var(--text); border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 50%, var(--surface)), var(--surface2)); }
+.avatar .i { width: 44px; height: 44px; }
+.prof h1 { margin: 14px 0 4px; font: 700 24px var(--ui); }
+.prof p { margin: 0; color: var(--muted); font-size: 14px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 22px 0; max-width: 760px; }
+.stats div { padding: 16px 8px; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.stats b { display: block; font: 700 26px var(--ui); }
+.stats span { color: var(--muted); font-size: 13px; }
+.menu { display: flex; flex-direction: column; max-width: 760px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; }
+.menu a, .menu button { display: flex; align-items: center; gap: 14px; min-height: 58px; padding: 0 18px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: 500 16px var(--ui); text-align: left; cursor: pointer; }
+.menu > :first-child { border-top: 0; }
+.menu span { flex: 1; }
+.menu span + .i { width: 18px; height: 18px; color: var(--faint); }
+
+/* ============================ Читалка ============================ */
+.stage { filter: brightness(var(--bright, 1)); }
+.rtop { display: block; padding: calc(var(--safe-t) + 8px) 14px 12px; }
+.rrow1 { display: flex; align-items: center; gap: 10px; }
+.rcov { width: 44px; flex: none; }
+.rcov .cover { border-radius: 8px; box-shadow: none; }
+.rcov .cover::after { display: none; }
+.rrow2 { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; color: var(--muted); font-size: 13px; }
+.pill { padding: 6px 14px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 600; font-size: 13.5px; }
+.rbot { padding: 14px 16px calc(14px + var(--safe-b)); }
+.rctl { display: flex; gap: 10px; max-width: 640px; margin: 12px auto 0; }
+.rctl button { height: 56px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--text); cursor: pointer; transition: transform 0.12s; }
+.rctl button:active { transform: scale(0.97); }
+.rctl .side { flex: 0 0 28%; }
+.rctl .rmain { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; border-color: transparent; background: var(--accent); color: var(--accent-ink); font: 600 16px var(--ui); }
+.rctl .rmain .aa { font: 600 18px var(--serif); }
+
+/* ============================ Настройки чтения ============================ */
+.swrow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.sws { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: var(--muted); font: 500 12px var(--ui); cursor: pointer; }
+.sws i { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--line); }
+.sws i .i { width: 24px; height: 24px; stroke-width: 2.4; }
+.sws.on { color: var(--text); }
+.sws.on i { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+.sunI { width: 40px; display: grid; place-items: center; color: var(--muted); }
+.sunI .i { width: 22px; height: 22px; }

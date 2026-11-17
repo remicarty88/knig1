@@ -61,6 +61,11 @@ const P = {
   growth: 'M5 20V12M10 20V8M15 20v-6M20 20V4',
   mask: 'M3 8c3-1.5 6-1.5 9 0 3-1.5 6-1.5 9 0v3c0 4-3 6.5-6 6.5-1.5 0-2.5-.8-3-1.5-.5.7-1.5 1.5-3 1.5-3 0-6-2.5-6-6.5z',
   door: 'M7 3h10v18H7zM14 12h1',
+  prev: 'M6 5v14M19 5l-9 7 9 7z',
+  next: 'M18 5v14M5 5l9 7-9 7z',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20c0-3.5 3.6-6 8-6s8 2.5 8 6',
 };
 const icon = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${P[n]}"/></svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
@@ -68,12 +73,13 @@ document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(e
 /* ============================== настройки ============================== */
 
 const THEMES = {
-  violet: { name: 'Фиолет', bg: '#0b0912', ink: '#dedaee' },
-  night: { name: 'Ночь', bg: '#0e1214', ink: '#d5dcd8' },
-  paper: { name: 'Бумага', bg: '#f4f5f1', ink: '#232a27' },
-  sepia: { name: 'Сепия', bg: '#efe3ca', ink: '#3a2d1c' },
+  paper: { name: 'День', bg: '#f4f5f1', ink: '#232a27', sw: '#f4f5f1', ck: '#1d7560' },
+  sepia: { name: 'Сепия', bg: '#efe3ca', ink: '#3a2d1c', sw: '#e6cc9c', ck: '#8a5a1f' },
+  night: { name: 'Ночь', bg: '#0e1214', ink: '#d5dcd8', sw: '#101315', ck: '#6fd0b4' },
+  violet: { name: 'Фиолет', bg: '#0b0912', ink: '#dedaee', sw: 'linear-gradient(135deg,#5b3df0,#c13bd8)', ck: '#ffffff' },
+  green: { name: 'Зелёная', bg: '#0c1511', ink: '#d3e2d9', sw: 'linear-gradient(135deg,#2f6b4a,#7cc79c)', ck: '#ffffff' },
 };
-const DEFAULTS = { theme: 'violet', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal' };
+const DEFAULTS = { theme: 'violet', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal', bright: 100 };
 const S = { ...DEFAULTS, ...store.get('reader.settings.v3', {}) };
 if (!THEMES[S.theme]) S.theme = 'night';
 
@@ -84,6 +90,7 @@ function applySettings() {
   r.dataset.justify = S.justify ? '1' : '0';
   r.style.setProperty('--rsize', S.size + 'px');
   r.style.setProperty('--rlh', S.lh);
+  r.style.setProperty('--bright', Math.max(40, Math.min(100, S.bright || 100)) / 100);
   if (metaTheme) metaTheme.content = THEMES[S.theme].bg;
   store.set('reader.settings.v3', S);
   if (readerApi) readerApi.relayout();
@@ -244,6 +251,7 @@ function route() {
     case 'read': return viewRead(id, dec(parts[1] || ''), parseInt(parts[2], 10) || 1);
     case 'shelf': return viewShelf(id);
     case 'fav': return viewFav(id);
+    case 'profile': return viewProfile(id);
     default: return viewHome(id);
   }
 }
@@ -306,7 +314,7 @@ async function fillTiles(id) {
     const cats = await getCatalog();
     if (id !== navId) return;
     box.innerHTML = cats
-      .map((c) => `<a class="tile" style="--h:${hashStr(c.name) % 360}" href="#/cat/${enc(c.path)}/1"><span>${esc(c.name)}</span>${icon('chev')}</a>`)
+      .map((c, i) => `<a class="gcard" style="--h:${hashStr(c.name) % 360}" href="#/cat/${enc(c.path)}/1"><div><b>${esc(c.name)}</b>${Number(c.count) ? `<small>${Number(c.count).toLocaleString('ru-RU')} книг</small>` : ''}</div>${icon(CAT_ICONS[i % CAT_ICONS.length])}</a>`)
       .join('');
   } catch (e) {
     if (id === navId) box.innerHTML = stateHtml('Жанры не загрузились', e.message, retryBtn);
@@ -398,10 +406,10 @@ async function viewSearch(id, q) {
   if (!q) {
     const qs = getQueries();
     content.innerHTML = `
-      <div class="head"><h1>Открыть</h1><p>Найдите книгу или автора, либо выберите жанр.</p></div>
+      <div class="head"><h1>Каталог</h1><p>Найдите книгу или автора, либо выберите жанр.</p></div>
       ${qs.length ? `<h2 class="sec">Недавние запросы</h2><div class="chips" style="flex-wrap:wrap">${qs
         .map((x) => `<a class="chip" href="#/search/${enc(x)}/1">${esc(x)}</a>`).join('')}</div>` : ''}`;
-    content.insertAdjacentHTML('beforeend', `<h2 class="sec">Жанры</h2><div class="tiles" id="tiles">${'<div class="skel-line" style="height:88px;border-radius:20px;margin:0"></div>'.repeat(8)}</div>`);
+    content.insertAdjacentHTML('beforeend', `<h2 class="sec">Жанры</h2><div class="gcards" id="tiles">${'<div class="skel-line" style="height:88px;border-radius:20px;margin:0"></div>'.repeat(8)}</div>`);
     fillTiles(id);
     if (matchMedia('(min-width: 900px)').matches) searchInput.focus();
     return;
@@ -472,26 +480,65 @@ async function viewCategory(id, path) {
 
 /* ============================== полка ============================== */
 
+const libTabs = (on) =>
+  `<div class="segtabs"><a class="${on === 'shelf' ? 'on' : ''}" href="#/shelf">Читаю</a><a class="${on === 'fav' ? 'on' : ''}" href="#/fav">Избранное</a></div>`;
+
 function viewShelf(id) {
   setNav('shelf');
   markGenre(null);
   const reading = recentList();
-  content.innerHTML = reading.length
-    ? `<div class="head"><h1>Библиотека</h1><p>Книги, которые вы читаете.</p></div>
-       <div class="grid">${reading.map(progressCardHtml).join('')}</div>`
-    : `<div class="head"><h1>Библиотека</h1></div>
-       ${stateHtml('Пока ничего не читаете', 'Откройте любую книгу — она появится здесь вместе с вашим прогрессом.', '<a class="btn" href="#/search/">Найти книгу</a>')}`;
+  const rows = reading.map((p) => {
+    const pc = pctOf(p);
+    return `
+      <a class="lrow" href="#/read/${enc(p.url)}/${p.page || 1}">
+        <div class="cover">${coverInner(p)}</div>
+        <div class="lm"><div class="t">${esc(p.title)}</div><div class="a">${esc(p.author)}</div><div class="bar"><i style="width:${pc}%"></i></div></div>
+        <span class="lpct">${pc}%</span>
+      </a>`;
+  }).join('');
+  content.innerHTML = `<div class="head"><h1>Моя библиотека</h1></div>${libTabs('shelf')}` + (reading.length
+    ? `<div class="llist">${rows}</div>`
+    : stateHtml('Пока ничего не читаете', 'Откройте любую книгу — она появится здесь вместе с вашим прогрессом.', '<a class="btn" href="#/search/">Найти книгу</a>'));
 }
 
 function viewFav(id) {
   setNav('fav');
   markGenre(null);
   const shelf = Object.values(getShelf()).sort((a, b) => b.added - a.added);
-  content.innerHTML = shelf.length
-    ? `<div class="head"><h1>Избранное</h1><p>Книги, которые вы сохранили.</p></div>
-       <div class="grid">${shelf.map(cardHtml).join('')}</div>`
-    : `<div class="head"><h1>Избранное</h1></div>
-       ${stateHtml('Здесь пусто', 'Нажмите на сердечко у книги — она сохранится здесь.', '<a class="btn" href="#/">Выбрать книгу</a>')}`;
+  const rows = shelf.map((b) => `
+    <a class="lrow" href="#/book/${enc(b.url)}">
+      <div class="cover">${coverInner(b)}</div>
+      <div class="lm"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div></div>
+      <span class="rbtn">Читать</span>
+    </a>`).join('');
+  content.innerHTML = `<div class="head"><h1>Моя библиотека</h1></div>${libTabs('fav')}` + (shelf.length
+    ? `<div class="llist">${rows}</div>`
+    : stateHtml('Здесь пусто', 'Нажмите на закладку или сердечко у книги — она сохранится здесь.', '<a class="btn" href="#/">Выбрать книгу</a>'));
+}
+
+function viewProfile(id) {
+  setNav('profile');
+  markGenre(null);
+  const prog = Object.values(getProgress());
+  const done = prog.filter((p) => pctOf(p) >= 97).length;
+  const favs = Object.keys(getShelf()).length;
+  content.innerHTML = `
+    <div class="prof">
+      <div class="avatar">${icon('user')}</div>
+      <h1>Мой профиль</h1>
+      <p>Всё хранится на этом устройстве</p>
+    </div>
+    <div class="stats">
+      <div><b>${prog.length - done}</b><span>В процессе</span></div>
+      <div><b>${done}</b><span>Прочитано</span></div>
+      <div><b>${favs}</b><span>Избранное</span></div>
+    </div>
+    <div class="menu">
+      <a href="#/shelf">${icon('books')}<span>Моя библиотека</span>${icon('chev')}</a>
+      <a href="#/fav">${icon('heart')}<span>Избранное</span>${icon('chev')}</a>
+      <button type="button" data-open-settings>${icon('gear')}<span>Оформление и чтение</span>${icon('chev')}</button>
+      <button type="button" data-clear>${icon('close')}<span>Очистить историю чтения</span></button>
+    </div>`;
 }
 
 /* ============================== книга ============================== */
@@ -499,7 +546,7 @@ function viewFav(id) {
 async function viewBook(id, url) {
   setNav(null);
   markGenre(null);
-  content.innerHTML = `<div class="head"><h1>Загрузка…</h1></div>`;
+  content.innerHTML = `<div class="bpage"><div class="skel-line" style="height:240px;border-radius:24px;margin-top:60px"></div></div>`;
 
   try {
     const b = await api(`/api/book?url=${enc(url)}`);
@@ -512,28 +559,36 @@ async function viewBook(id, url) {
     let onShelf = Boolean(getShelf()[url]);
     if (onShelf) { const sh = getShelf(); sh[url] = { ...sh[url], title: b.title, author: b.author, cover: b.cover }; store.set('reader.shelf', sh); }
 
-    const shelfLabel = () => (onShelf ? 'В избранном' : 'В избранное');
+    const desc = b.description || b.annotation || b.about || '';
+    const rawTags = Array.isArray(b.genres) ? b.genres : b.genre ? [b.genre] : [];
+    const tags = rawTags.map((t) => (typeof t === 'string' ? t : t && t.name)).filter(Boolean).slice(0, 4);
 
     content.innerHTML = `
-      <div class="bhero">
-        ${b.cover ? `<img class="bg" src="${imgSrc(b.cover)}" alt="" onerror="this.remove()">` : ''}
-        <div class="cover">${coverInner(b)}</div>
-        <div class="meta">
-          <h1>${esc(b.title)}</h1>
-          <div class="by">${esc(b.author || 'Автор не указан')}</div>
-          <div class="facts">${b.totalPages} стр. текста</div>
-          <div class="acts">
-            ${started ? `<div class="bar"><i style="width:${pc}%"></i></div>` : ''}
-            <a class="btn" href="#/read/${enc(url)}/${started ? p.page : 1}">${started ? `Продолжить · стр. ${p.page}` : 'Читать'}</a>
-            <button class="btn alt" type="button" id="shelfBtn">${shelfLabel()}</button>
-            ${started ? `<a class="hint" href="#/read/${enc(url)}/1" data-restart>Начать сначала</a>` : ''}
+      <div class="bpage">
+        <div class="pagebar"><button class="ibtn rnd" type="button" data-back aria-label="Назад">${icon('back')}</button></div>
+        <div class="btop">
+          <div class="cover">${coverInner(b)}</div>
+          <div class="bmeta">
+            <h1>${esc(b.title)}</h1>
+            <div class="by">${esc(b.author || 'Автор не указан')}</div>
+            ${ratingHtml(b)}
+            <div class="facts">${b.totalPages} стр. текста</div>
           </div>
         </div>
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
+        ${desc ? `<h2 class="sec">О книге</h2><p class="bdesc">${esc(desc)}</p>` : ''}
+        ${started ? `<div class="bar"><i style="width:${pc}%"></i></div>` : ''}
+        <div class="bacts">
+          <a class="btn" href="#/read/${enc(url)}/${started ? p.page : 1}">${started ? `Продолжить · стр. ${p.page}` : 'Читать книгу'}</a>
+          <button class="fbtn ${onShelf ? 'on' : ''}" type="button" id="shelfBtn" aria-pressed="${onShelf}" aria-label="В избранное">${icon('mark')}</button>
+        </div>
+        ${started ? `<a class="brestart" href="#/read/${enc(url)}/1" data-restart>Начать сначала</a>` : ''}
       </div>`;
 
     $('#shelfBtn').onclick = () => {
       onShelf = toggleShelf(b);
-      $('#shelfBtn').textContent = shelfLabel();
+      $('#shelfBtn').classList.toggle('on', onShelf);
+      $('#shelfBtn').setAttribute('aria-pressed', String(onShelf));
     };
     const restart = $('[data-restart]');
     if (restart) restart.addEventListener('click', () => saveProgress(url, { page: 1, scroll: 0, block: 0 }));
@@ -559,14 +614,23 @@ async function viewRead(id, url, startPage) {
       <div class="rfoot"><span id="fPage"></span><span id="fPct"></span></div>
       <div class="rprog"><i id="rFill"></i></div>
       <header class="rtop">
-        <a class="ibtn" href="${bookHref}" aria-label="К описанию книги">${icon('back')}</a>
-        <div class="rtitle"><b id="rTitle">${esc(saved.title || '')}</b><span id="rAuthor">${esc(saved.author || '')}</span></div>
-        <button class="ibtn aa" type="button" data-open-settings aria-label="Настройки чтения">Aa</button>
+        <div class="rrow1">
+          <a class="ibtn rnd" href="${bookHref}" aria-label="К описанию книги">${icon('back')}</a>
+          <div class="rcov"><div class="cover" id="rCov">${saved.title ? coverInner(saved) : ''}</div></div>
+          <div class="rtitle"><b id="rTitle">${esc(saved.title || '')}</b><span id="rAuthor">${esc(saved.author || '')}</span></div>
+          <button class="ibtn rnd" type="button" id="rFav" aria-label="В избранное">${icon('mark')}</button>
+        </div>
+        <div class="rrow2"><span class="pill" id="rPill"></span><span id="rMeta"></span></div>
       </header>
       <footer class="rbot">
         <div class="rlabel" id="rLabel"></div>
         <input type="range" id="rRange" min="0" max="1000" value="0" aria-label="Положение в книге">
         <div class="rends"><span>Начало</span><span>Конец</span></div>
+        <div class="rctl">
+          <button type="button" class="side" id="rPrev" aria-label="Предыдущая часть">${icon('prev')}</button>
+          <button type="button" class="rmain" data-open-settings><span class="aa">Aa</span>Оформление</button>
+          <button type="button" class="side" id="rNext" aria-label="Следующая часть">${icon('next')}</button>
+        </div>
       </footer>
       <div class="rload on" id="rLoad"><i></i></div>
       <div class="rhint" id="rHint" hidden></div>
@@ -810,6 +874,8 @@ async function viewRead(id, url, startPage) {
     $('#fPage').textContent = `${(f.p - 1) * f.S + f.s + 1} из ~${f.S * total}`;
     $('#fPct').textContent = pc + '%';
     $('#rLabel').textContent = `Часть ${f.p} из ${total} · ${pc}%`;
+    $('#rPill').textContent = `Часть ${f.p} из ${total}`;
+    $('#rMeta').textContent = `${pc}% прочитано`;
 
     let chapter = '';
     for (let i = f.anchor; i >= 0; i--) {
@@ -938,6 +1004,23 @@ async function viewRead(id, url, startPage) {
   });
   range.addEventListener('change', () => jumpTo(Number(range.value)));
 
+  const goPart = (d) => {
+    if (!cur) return;
+    const p = Math.min(total, Math.max(1, cur.p + d));
+    if (p === cur.p) return toast(d > 0 ? 'Это последняя часть' : 'Это первая часть');
+    jumpTo(((p - 1) / total) * 1000 + 0.01);
+  };
+  $('#rPrev').onclick = () => goPart(-1);
+  $('#rNext').onclick = () => goPart(1);
+
+  const favBtn = $('#rFav');
+  const syncFav = () => favBtn.classList.toggle('on', Boolean(getShelf()[url]));
+  syncFav();
+  favBtn.onclick = () => {
+    toggleShelf({ url, title: meta.title || '', author: meta.author || '', cover: meta.cover });
+    syncFav();
+  };
+
   let lastW = 0, lastH = 0;
   const ro = new ResizeObserver(() => {
     if (stage.clientWidth !== lastW || stage.clientHeight !== lastH) {
@@ -977,6 +1060,7 @@ async function viewRead(id, url, startPage) {
       meta = { title: book.title, author: book.author, cover: book.cover };
       $('#rTitle').textContent = book.title;
       $('#rAuthor').textContent = book.author || '';
+      $('#rCov').innerHTML = coverInner(meta);
       document.title = book.title;
     }
 
@@ -1006,15 +1090,19 @@ async function viewRead(id, url, startPage) {
 
 function sheetBody() {
   const themes = Object.entries(THEMES)
-    .map(([k, t]) => `<button type="button" class="sw ${S.theme === k ? 'on' : ''}" data-set="theme" data-val="${k}" style="--sb:${t.bg};--si:${t.ink}"><span>Аа</span><em>${t.name}</em></button>`)
+    .map(([k, t]) => `<button type="button" class="sws ${S.theme === k ? 'on' : ''}" data-set="theme" data-val="${k}"><i style="background:${t.sw};color:${t.ck}">${S.theme === k ? icon('check') : ''}</i><span>${t.name}</span></button>`)
     .join('');
   const seg = (key, items) =>
     items.map(([v, label, cls]) => `<button type="button" class="${cls || ''} ${String(S[key]) === String(v) ? 'on' : ''}" data-set="${key}" data-val="${v}">${label}</button>`).join('');
 
   return `
-    <div class="sh-row"><div class="sh-label">Тема</div><div class="seg">${themes}</div></div>
+    <div class="sh-row"><div class="sh-label">Тема</div><div class="swrow">${themes}</div></div>
     <div class="sh-row">
-      <div class="sh-label"><span>Размер текста</span><span>${S.size}</span></div>
+      <div class="sh-label"><span>Яркость</span><span id="brPct">${S.bright}%</span></div>
+      <div class="sizeRow"><span class="sunI">${icon('sun')}</span><input type="range" id="brightRange" min="40" max="100" step="1" value="${S.bright}" aria-label="Яркость"></div>
+    </div>
+    <div class="sh-row">
+      <div class="sh-label"><span>Размер текста</span><span id="szVal">${S.size}</span></div>
       <div class="sizeRow">
         <button type="button" class="ibtn sm" data-step="-1" aria-label="Меньше">А</button>
         <input type="range" id="sizeRange" min="15" max="28" step="1" value="${S.size}" aria-label="Размер текста">
@@ -1088,11 +1176,18 @@ sheetRoot.addEventListener('click', (e) => {
   $('#sheetBody').innerHTML = sheetBody();
 });
 sheetRoot.addEventListener('input', (e) => {
-  if (e.target.id !== 'sizeRange') return;
-  S.size = Number(e.target.value);
-  applySettings();
-  const lab = sheetRoot.querySelector('.sh-label span:last-child');
-  if (lab) lab.textContent = S.size;
+  if (e.target.id === 'sizeRange') {
+    S.size = Number(e.target.value);
+    applySettings();
+    const v = $('#szVal');
+    if (v) v.textContent = S.size;
+  } else if (e.target.id === 'brightRange') {
+    S.bright = Number(e.target.value);
+    document.documentElement.style.setProperty('--bright', S.bright / 100);
+    store.set('reader.settings.v3', S);
+    const v = $('#brPct');
+    if (v) v.textContent = S.bright + '%';
+  }
 });
 
 /* ============================== события ============================== */
@@ -1102,6 +1197,13 @@ document.addEventListener('click', (e) => {
     sheetRoot.classList.contains('open') ? closeSheet() : openSheet();
   }
   if (e.target.closest('[data-retry]')) route();
+  if (e.target.closest('[data-back]')) {
+    if (history.length > 1) history.back(); else location.hash = '#/';
+  }
+  if (e.target.closest('[data-clear]') && confirm('Удалить прогресс чтения всех книг?')) {
+    store.set('reader.progress', {});
+    route();
+  }
   const fav = e.target.closest('[data-fav]');
   if (fav) {
     e.preventDefault();
