@@ -38,6 +38,7 @@ function hashStr(s) {
   return Math.abs(h);
 }
 
+const known = new Map(); // книги, показанные на экране
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -51,6 +52,15 @@ const P = {
   chev: 'M9 5l7 7-7 7',
   close: 'M6 6l12 12M18 6L6 18',
   mark: 'M7 4h10v16l-5-4-5 4z',
+  filter: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4v6M9 14v6',
+  star: 'M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z',
+  heart: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
+  compass: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z',
+  gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8',
+  arrow: 'M5 12h14M13 6l6 6-6 6',
+  growth: 'M5 20V12M10 20V8M15 20v-6M20 20V4',
+  mask: 'M3 8c3-1.5 6-1.5 9 0 3-1.5 6-1.5 9 0v3c0 4-3 6.5-6 6.5-1.5 0-2.5-.8-3-1.5-.5.7-1.5 1.5-3 1.5-3 0-6-2.5-6-6.5z',
+  door: 'M7 3h10v18H7zM14 12h1',
 };
 const icon = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${P[n]}"/></svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
@@ -58,12 +68,13 @@ document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(e
 /* ============================== настройки ============================== */
 
 const THEMES = {
+  violet: { name: 'Фиолет', bg: '#0b0912', ink: '#dedaee' },
   night: { name: 'Ночь', bg: '#0e1214', ink: '#d5dcd8' },
   paper: { name: 'Бумага', bg: '#f4f5f1', ink: '#232a27' },
   sepia: { name: 'Сепия', bg: '#efe3ca', ink: '#3a2d1c' },
 };
-const DEFAULTS = { theme: 'night', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal' };
-const S = { ...DEFAULTS, ...store.get('reader.settings.v2', {}) };
+const DEFAULTS = { theme: 'violet', size: 19, font: 'serif', lh: 1.7, justify: true, margin: 'normal' };
+const S = { ...DEFAULTS, ...store.get('reader.settings.v3', {}) };
 if (!THEMES[S.theme]) S.theme = 'night';
 
 function applySettings() {
@@ -74,7 +85,7 @@ function applySettings() {
   r.style.setProperty('--rsize', S.size + 'px');
   r.style.setProperty('--rlh', S.lh);
   if (metaTheme) metaTheme.content = THEMES[S.theme].bg;
-  store.set('reader.settings.v2', S);
+  store.set('reader.settings.v3', S);
   if (readerApi) readerApi.relayout();
 }
 applySettings();
@@ -122,6 +133,7 @@ function coverInner(b) {
 }
 
 function cardHtml(b) {
+  known.set(b.url, b);
   return `
     <a class="card" href="#/book/${enc(b.url)}">
       <div class="cover">${coverInner(b)}${b.rating ? `<span class="rate">★ ${b.rating}</span>` : ''}</div>
@@ -221,7 +233,8 @@ function route() {
   const view = parts[0] || 'home';
 
   document.body.classList.toggle('reading', view === 'read');
-  document.title = 'Читалка';
+  document.body.dataset.view = view;
+  document.title = 'BookLife';
   window.scrollTo(0, 0);
 
   switch (view) {
@@ -230,18 +243,82 @@ function route() {
     case 'book': return viewBook(id, dec(parts[1] || ''));
     case 'read': return viewRead(id, dec(parts[1] || ''), parseInt(parts[2], 10) || 1);
     case 'shelf': return viewShelf(id);
+    case 'fav': return viewFav(id);
     default: return viewHome(id);
   }
 }
 
 /* ============================== главная ============================== */
 
+const CAT_ICONS = ['star', 'growth', 'heart', 'mask', 'door'];
+const ratingHtml = (b) => (b.rating ? `<span class="rt">${icon('star')}${esc(b.rating)}</span>` : '');
+
+function heroSlide(b) {
+  const w = String(b.title || '').trim().split(/\s+/);
+  const k = Math.ceil(w.length / 2);
+  const first = esc(w.slice(0, k).join(' '));
+  const rest = esc(w.slice(k).join(' '));
+  return `
+    <a class="slide" href="#/book/${enc(b.url)}">
+      ${b.cover ? `<img class="sbg" src="${imgSrc(b.cover)}" alt="" onerror="this.remove()">` : ''}
+      <div class="stext">
+        <span class="badge">${esc(b.cat || 'Подборка')}</span>
+        <h2>${first}${rest ? ` <em>${rest}</em>` : ''}</h2>
+        <p>${esc(b.author)}</p>
+        <span class="sbtn">Читать книгу ${icon('arrow')}</span>
+      </div>
+      <div class="cover">${coverInner(b)}</div>
+    </a>`;
+}
+function heroHtml(list) {
+  return `<div class="hero"><div class="hero-track" id="heroTrack">${list.map(heroSlide).join('')}</div>
+    <div class="hero-count" id="heroCount">1 / ${list.length}</div></div>
+    <div class="dots" id="dots">${list.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>`;
+}
+function rcardHtml(b) {
+  known.set(b.url, b);
+  const on = Boolean(getShelf()[b.url]);
+  return `
+    <div class="rcard">
+      <a href="#/book/${enc(b.url)}">
+        <div class="cover">${coverInner(b)}</div>
+        <div class="t">${esc(b.title)}</div>
+        <div class="a">${esc(b.author)}</div>
+      </a>
+      <div class="rcf">${ratingHtml(b)}<button class="fav ${on ? 'on' : ''}" type="button" data-fav="${esc(b.url)}" aria-pressed="${on}" aria-label="В избранное">${icon('heart')}</button></div>
+    </div>`;
+}
+function popHtml(b, i) {
+  known.set(b.url, b);
+  return `
+    <a class="pop" href="#/book/${enc(b.url)}">
+      <span class="num">${i + 1}</span>
+      <div class="cover">${coverInner(b)}</div>
+      <div class="pm"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div>${ratingHtml(b)}</div>
+      <span class="rbtn">Читать</span>
+    </a>`;
+}
+
+async function fillTiles(id) {
+  const box = $('#tiles');
+  if (!box) return;
+  try {
+    const cats = await getCatalog();
+    if (id !== navId) return;
+    box.innerHTML = cats
+      .map((c) => `<a class="tile" style="--h:${hashStr(c.name) % 360}" href="#/cat/${enc(c.path)}/1"><span>${esc(c.name)}</span>${icon('chev')}</a>`)
+      .join('');
+  } catch (e) {
+    if (id === navId) box.innerHTML = stateHtml('Жанры не загрузились', e.message, retryBtn);
+  }
+}
+
 async function viewHome(id) {
   setNav('home');
   markGenre(null);
 
   const recent = recentList();
-  let html = `<div class="head"><h1>Что почитаем?</h1><p>Выберите жанр или найдите книгу по названию и автору.</p></div>`;
+  let html = `<div id="heroBox"><div class="skel-line" style="height:236px;border-radius:28px;margin:4px 0"></div></div><div id="chipsBox"></div>`;
 
   if (recent.length) {
     const r = recent[0];
@@ -259,22 +336,55 @@ async function viewHome(id) {
         <span class="go">${icon('chev')}</span>
       </a>`;
     if (recent.length > 1) {
-      html += `<h2 class="sec">Недавние</h2><div class="row">${recent.slice(1, 12).map(progressCardHtml).join('')}</div>`;
+      html += `<div class="sech"><h2>Недавние</h2></div><div class="row">${recent.slice(1, 12).map(progressCardHtml).join('')}</div>`;
     }
   }
-
-  html += `<h2 class="sec">Жанры</h2>
-    <div class="tiles" id="tiles">${'<div class="skel-line" style="height:62px;border-radius:15px;margin:0"></div>'.repeat(8)}</div>`;
+  html += `<div id="listsBox"></div>`;
   content.innerHTML = html;
 
   try {
     const cats = await getCatalog();
     if (id !== navId) return;
-    $('#tiles').innerHTML = cats
-      .map((c) => `<a class="tile" href="#/cat/${enc(c.path)}/1"><span>${esc(c.name)}</span>${icon('chev')}</a>`)
-      .join('');
+    $('#chipsBox').innerHTML = `<div class="chips cats">${cats.slice(0, 7)
+      .map((c, i) => `<a class="cat" href="#/cat/${enc(c.path)}/1">${icon(CAT_ICONS[i % CAT_ICONS.length])}<span>${esc(c.name)}</span></a>`)
+      .join('')}<a class="cat" href="#/search/">${icon('compass')}<span>Все жанры</span></a></div>`;
+
+    const load = (c) => (c ? api(`/api/category?path=${enc(c.path)}&page=1`).catch(() => null) : Promise.resolve(null));
+    const [da, db] = await Promise.all([load(cats[0]), load(cats[1])]);
+    if (id !== navId) return;
+
+    const A = (da && da.results) || [];
+    if (!A.length) {
+      $('#heroBox').innerHTML = stateHtml('Подборка не загрузилась', 'Проверьте соединение и попробуйте ещё раз.', retryBtn);
+      return;
+    }
+    const tag = (da && da.title) || cats[0].name;
+    const withCover = A.filter((x) => x.cover);
+    const heroList = (withCover.length >= 3 ? withCover : A).slice(0, 5).map((x) => ({ ...x, cat: tag }));
+    $('#heroBox').innerHTML = heroHtml(heroList);
+
+    const track = $('#heroTrack'), cnt = $('#heroCount'), dots = [...$('#dots').children];
+    track.addEventListener('scroll', () => {
+      const i = Math.min(heroList.length - 1, Math.round(track.scrollLeft / Math.max(1, track.clientWidth)));
+      cnt.textContent = `${i + 1} / ${heroList.length}`;
+      dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    }, { passive: true });
+
+    const inHero = new Set(heroList.map((x) => x.url));
+    let recs = A.filter((x) => !inHero.has(x.url)).slice(0, 10);
+    if (recs.length < 4) recs = A.slice(0, 10);
+
+    const B = (db && db.results) || [];
+    const pops = (B.length ? B : A.slice().reverse()).slice(0, 5);
+    const popCat = B.length ? cats[1] : cats[0];
+
+    $('#listsBox').innerHTML = `
+      <div class="sech"><h2>Рекомендуем</h2><a href="#/cat/${enc(cats[0].path)}/1">Все книги ${icon('arrow')}</a></div>
+      <div class="rrow">${recs.map(rcardHtml).join('')}</div>
+      <div class="sech"><h2>Популярное 🔥</h2><a href="#/cat/${enc(popCat.path)}/1">Все книги ${icon('arrow')}</a></div>
+      <div class="pops">${pops.map(popHtml).join('')}</div>`;
   } catch (e) {
-    if (id === navId) $('#tiles').innerHTML = stateHtml('Жанры не загрузились', e.message, retryBtn);
+    if (id === navId) $('#heroBox').innerHTML = stateHtml('Не удалось загрузить', e.message, retryBtn);
   }
 }
 
@@ -288,9 +398,11 @@ async function viewSearch(id, q) {
   if (!q) {
     const qs = getQueries();
     content.innerHTML = `
-      <div class="head"><h1>Поиск</h1><p>Введите название книги или имя автора.</p></div>
+      <div class="head"><h1>Открыть</h1><p>Найдите книгу или автора, либо выберите жанр.</p></div>
       ${qs.length ? `<h2 class="sec">Недавние запросы</h2><div class="chips" style="flex-wrap:wrap">${qs
         .map((x) => `<a class="chip" href="#/search/${enc(x)}/1">${esc(x)}</a>`).join('')}</div>` : ''}`;
+    content.insertAdjacentHTML('beforeend', `<h2 class="sec">Жанры</h2><div class="tiles" id="tiles">${'<div class="skel-line" style="height:88px;border-radius:20px;margin:0"></div>'.repeat(8)}</div>`);
+    fillTiles(id);
     if (matchMedia('(min-width: 900px)').matches) searchInput.focus();
     return;
   }
@@ -364,19 +476,22 @@ function viewShelf(id) {
   setNav('shelf');
   markGenre(null);
   const reading = recentList();
+  content.innerHTML = reading.length
+    ? `<div class="head"><h1>Библиотека</h1><p>Книги, которые вы читаете.</p></div>
+       <div class="grid">${reading.map(progressCardHtml).join('')}</div>`
+    : `<div class="head"><h1>Библиотека</h1></div>
+       ${stateHtml('Пока ничего не читаете', 'Откройте любую книгу — она появится здесь вместе с вашим прогрессом.', '<a class="btn" href="#/search/">Найти книгу</a>')}`;
+}
+
+function viewFav(id) {
+  setNav('fav');
+  markGenre(null);
   const shelf = Object.values(getShelf()).sort((a, b) => b.added - a.added);
-
-  if (!reading.length && !shelf.length) {
-    content.innerHTML = `
-      <div class="head"><h1>Моя полка</h1><p>Здесь будут книги, которые вы читаете и сохранили.</p></div>
-      ${stateHtml('Полка пуста', 'Откройте книгу и нажмите «На полку» — она появится здесь.', '<a class="btn" href="#/">Найти книгу</a>')}`;
-    return;
-  }
-
-  content.innerHTML = `
-    <div class="head"><h1>Моя полка</h1></div>
-    ${reading.length ? `<h2 class="sec" style="margin-top:6px">Читаю</h2><div class="grid">${reading.map(progressCardHtml).join('')}</div>` : ''}
-    ${shelf.length ? `<h2 class="sec">Сохранено</h2><div class="grid">${shelf.map(cardHtml).join('')}</div>` : ''}`;
+  content.innerHTML = shelf.length
+    ? `<div class="head"><h1>Избранное</h1><p>Книги, которые вы сохранили.</p></div>
+       <div class="grid">${shelf.map(cardHtml).join('')}</div>`
+    : `<div class="head"><h1>Избранное</h1></div>
+       ${stateHtml('Здесь пусто', 'Нажмите на сердечко у книги — она сохранится здесь.', '<a class="btn" href="#/">Выбрать книгу</a>')}`;
 }
 
 /* ============================== книга ============================== */
@@ -397,7 +512,7 @@ async function viewBook(id, url) {
     let onShelf = Boolean(getShelf()[url]);
     if (onShelf) { const sh = getShelf(); sh[url] = { ...sh[url], title: b.title, author: b.author, cover: b.cover }; store.set('reader.shelf', sh); }
 
-    const shelfLabel = () => (onShelf ? 'На полке' : 'На полку');
+    const shelfLabel = () => (onShelf ? 'В избранном' : 'В избранное');
 
     content.innerHTML = `
       <div class="bhero">
@@ -624,6 +739,7 @@ async function viewRead(id, url, startPage) {
     dx = 0;
     place(0);
     afterMove();
+    try { navigator.vibrate && navigator.vibrate(5); } catch {}
   }
 
   async function turn(dir, from = 0) {
@@ -924,6 +1040,32 @@ function openSheet() {
       <div id="sheetBody">${sheetBody()}</div>
     </div>`;
   requestAnimationFrame(() => requestAnimationFrame(() => sheetRoot.classList.add('open')));
+
+  const sh = sheetRoot.querySelector('.sheet');
+  if (sh && matchMedia('(max-width: 899px)').matches) {
+    let y0 = null, dy = 0;
+    const start = (e) => {
+      if (e.target.closest('button')) return;
+      y0 = e.clientY; dy = 0; sh.style.transition = 'none';
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    };
+    const move = (e) => {
+      if (y0 == null) return;
+      dy = Math.max(0, e.clientY - y0);
+      sh.style.transform = `translateY(${dy}px)`;
+    };
+    const end = () => {
+      if (y0 == null) return;
+      y0 = null; sh.style.transition = ''; sh.style.transform = '';
+      if (dy > 100) closeSheet();
+    };
+    sh.querySelectorAll('.grab, .sh-head').forEach((el) => {
+      el.addEventListener('pointerdown', start);
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+    });
+  }
 }
 
 function closeSheet(instant) {
@@ -960,6 +1102,16 @@ document.addEventListener('click', (e) => {
     sheetRoot.classList.contains('open') ? closeSheet() : openSheet();
   }
   if (e.target.closest('[data-retry]')) route();
+  const fav = e.target.closest('[data-fav]');
+  if (fav) {
+    e.preventDefault();
+    const b = known.get(fav.dataset.fav);
+    if (b) {
+      const on = toggleShelf(b);
+      fav.classList.toggle('on', on);
+      fav.setAttribute('aria-pressed', String(on));
+    }
+  }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 
